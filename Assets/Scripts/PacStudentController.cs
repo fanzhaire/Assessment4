@@ -1,87 +1,149 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 public class PacStudentController : MonoBehaviour
 {
-    private Vector2[] localPathPoints = {
-        new Vector2(0.32f, -0.32f), 
-        new Vector2(3.84f, -0.32f),
-        new Vector2(3.84f, -1.60f),
-        new Vector2(2.88f, -1.60f),
-        new Vector2(2.88f, -2.56f),
-        new Vector2(3.84f, -2.56f),
-        new Vector2(3.84f, -3.52f),
-        new Vector2(2.88f, -3.52f),
-        new Vector2(2.88f, -4.48f),
-        new Vector2(1.92f, -4.48f),
-        new Vector2(1.92f, -2.56f),
-        new Vector2(0.32f, -2.56f),
-        new Vector2(0.32f, -0.32f),     
-     };
+    public float speed = 5.0f; 
+    public Animator animator; 
 
+    private Vector3 targetPosition;
+    private bool isLerping;
+    private string lastInput = "";
+    private string currentInput = "";
 
-    private int currentPointIndex = 0;
-    public float speed = 1f;
-    private Animator animator;
-    public GameObject manualLevelLayout; 
+    public ParticleSystem dustParticles;
+
+    public AudioSource moveAudio;
+
+    private bool hasMovedOnce = false;
+
+    private Dictionary<string, Vector3> directions = new Dictionary<string, Vector3>
+    {
+        { "w", Vector3.up },
+        { "a", Vector3.left },
+        { "s", Vector3.down },
+        { "d", Vector3.right }
+    };
+
+    private Dictionary<string, string> animationTriggers = new Dictionary<string, string>
+    {
+        { "w", "MoveUp" },
+        { "a", "MoveLeft" },
+        { "s", "MoveDown" },
+        { "d", "MoveRight" }
+    };
 
     void Start()
     {
-        animator = GetComponent<Animator>();
+        moveAudio.Stop();
+
+        targetPosition = transform.position;
     }
 
     void Update()
     {
-        MovePacStudent();
-    }
+        
+        GetInput();
 
-    void MovePacStudent()
-    {
-        Vector2 globalTargetPoint = localPathPoints[currentPointIndex] + (Vector2)manualLevelLayout.transform.position;
+        if (!hasMovedOnce) return;
 
-        if (Vector2.Distance(transform.position, globalTargetPoint) < 0.01f)
+        if (!isLerping)
         {
-            currentPointIndex = (currentPointIndex + 1) % localPathPoints.Length;
-        }
+            TryMove(lastInput);
 
-        Vector2 direction = (globalTargetPoint - (Vector2)transform.position);
-        direction.y = -direction.y;  
-        direction = direction.normalized;
-        transform.position = Vector2.MoveTowards(transform.position, globalTargetPoint, speed * Time.deltaTime);
-
-        UpdateAnimation(direction);
-    }
-
-    void UpdateAnimation(Vector2 direction)
-    {
-        Vector2 globalTargetPoint = localPathPoints[currentPointIndex] + (Vector2)manualLevelLayout.transform.position;
-
-        if (Mathf.Abs(direction.x) > Mathf.Abs(direction.y))
-        {
-            // Horizontal movement
-            if (globalTargetPoint.x > transform.position.x)
+            if (!CanMoveTo(targetPosition))
             {
-                animator.Play("WalkRight");
+                TryMove(currentInput);
             }
-            else
+
+            if (CanMoveTo(targetPosition))
             {
-                animator.Play("WalkLeft");
+                StartLerping();
             }
         }
         else
         {
-            // Vertical movement
-            if (globalTargetPoint.y < transform.position.y)
+            ContinueLerping();
+        }
+    }
+
+    void GetInput()
+    {
+        if (Input.GetKeyDown(KeyCode.W) || Input.GetKeyDown(KeyCode.A) || Input.GetKeyDown(KeyCode.S) || Input.GetKeyDown(KeyCode.D))
+        {
+            lastInput = Input.inputString;
+            TryMove(lastInput);
+
+            if (CanMoveTo(targetPosition))
             {
-                animator.Play("WalkDown");
-            }
-            else
-            {
-                animator.Play("WalkUp");
+                hasMovedOnce = true;
+                StartLerping();
             }
         }
     }
 
 
+    void TryMove(string directionKey)
+    {
+        if (directions.ContainsKey(directionKey))
+        {
+            targetPosition = transform.position + directions[directionKey];
+            currentInput = directionKey;
+        }
+    }
 
+    bool CanMoveTo(Vector3 targetPos)
+    {
+        // 这里需要你实现一个方法来检查目标位置是否可行走
+        // 例如，检查LevelGenerator的levelMap，确保目标位置没有墙或者其他障碍物
+        return true; // 假设总是可以移动
+    }
+
+    void StartLerping()
+    {
+        isLerping = true;
+        PlayAnimation(currentInput);
+        
+        dustParticles.Play();
+
+        if (!moveAudio.isPlaying)
+        {
+            moveAudio.Play();
+        }
+
+    }
+
+    void ContinueLerping()
+    {
+        transform.position = Vector3.MoveTowards(transform.position, targetPosition, speed * Time.deltaTime);
+
+        if (transform.position == targetPosition)
+        {
+            isLerping = false;
+            StopAnimation();          
+        }
+    }
+
+    void PlayAnimation(string directionKey)
+    {
+        StopAnimation();
+        if (animationTriggers.ContainsKey(directionKey))
+        {
+            animator.SetTrigger(animationTriggers[directionKey]);
+        }
+    }
+
+    void StopAnimation()
+    {
+        foreach (var trigger in animationTriggers.Values)
+        {
+            animator.ResetTrigger(trigger);
+        }
+
+        dustParticles.Stop();
+
+        moveAudio.Stop();
+
+    }
 }
