@@ -3,8 +3,8 @@ using UnityEngine;
 
 public class CherryController : MonoBehaviour
 {
-    public GameObject cherryPrefab;  // Assign your cherry prefab here in the inspector
-    public Transform centerPoint;    // Assign the center point transform here in the inspector
+    public GameObject cherryPrefab;
+    public Transform centerPoint;
     public float spawnRate = 10f;
 
     private Camera mainCamera;
@@ -16,28 +16,28 @@ public class CherryController : MonoBehaviour
         mainCamera = Camera.main;
         StartCoroutine(InitialDelay());
     }
+
     private IEnumerator InitialDelay()
     {
         yield return new WaitForSeconds(spawnRate);
         StartCoroutine(SpawnCherry());
     }
+
     private IEnumerator SpawnCherry()
     {
-        while (true)
-        {
-            // Calculate spawn position (just outside of camera view)
-            spawnPosition = RandomPositionOutsideCamera();
-            GameObject cherryInstance = Instantiate(cherryPrefab, spawnPosition, Quaternion.identity);
+        // Calculate spawn position (just outside of camera view)
+        spawnPosition = RandomPositionOutsideCamera();
+        GameObject cherryInstance = Instantiate(cherryPrefab, spawnPosition, Quaternion.identity);
 
-            // Calculate end position (opposite side from spawn position, passing through the center)
-            endPosition = (2 * new Vector2(centerPoint.position.x, centerPoint.position.y)) - spawnPosition;
+        // Calculate end position (opposite side from spawn position, passing through the center)
+        endPosition = (2 * new Vector2(centerPoint.position.x, centerPoint.position.y)) - spawnPosition;
 
-            yield return StartCoroutine(MoveCherry(cherryInstance));  // Wait for the cherry to finish moving
+        yield return StartCoroutine(MoveCherry(cherryInstance));
 
-            yield return new WaitForSeconds(spawnRate);  // Then wait for 10 seconds before spawning another
-        }
+        // After destroying the cherry, wait for 10 seconds before spawning another
+        yield return new WaitForSeconds(spawnRate);
+        StartCoroutine(SpawnCherry());
     }
-
 
     private Vector2 RandomPositionOutsideCamera()
     {
@@ -74,11 +74,13 @@ public class CherryController : MonoBehaviour
 
         while (t < 1)
         {
-            t += Time.deltaTime / spawnRate;  // Adjust this value if the cherry moves too fast/slow
+            if (cherry == null) yield break;  // Check if the cherry has been destroyed
+
+            t += Time.deltaTime / spawnRate;
             cherry.transform.position = Vector2.Lerp(startPosition, endPosition, t);
             yield return null;
         }
 
-        Destroy(cherry);
+        if (cherry != null) Destroy(cherry);  // Check again before destroying
     }
 }

@@ -5,11 +5,18 @@ TagManager:
   serializedVersion: 2
   tags:
   - OnTriggerEnter2D
+  - Wall
+  - LeftTeleporter
+  - RightTeleporter
+  - Diamond
+  - bounscherry
+  - powerpellet
+  - GhostTag
   layers:
   - Default
   - TransparentFX
   - Ignore Raycast
-  - 
+  - Wall
   - Water
   - UI
   - 
