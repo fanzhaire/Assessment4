@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 
 public class PacStudentController : MonoBehaviour
 {
@@ -15,17 +16,27 @@ public class PacStudentController : MonoBehaviour
     public ParticleSystem wallCollisionParticles;
     private bool isTeleporting = false;
 
-    public Text scoreText;  // 分数的UI文本
-    private int score = 0;  // 当前分数
+    public Text scoreText;
+    private int score = 0;
     public AudioClip diamondSound;
 
     public AudioSource scaredAudioSource;
-    
 
-    public Text countdownText; // 这是一个UnityEngine.UI.Text，需要指向Canvas上的文本组件
+
+    public Text countdownText;
     private float scaredTime = 10f;
     private bool isScared = false;
     private bool isRecovering = false;
+
+    public TextMeshProUGUI gameOverText;// 在Unity编辑器中添加Game Over文本引用
+    private bool isGameOver = false;
+    public string startSceneName = "StartScene"; // 请设置为您的开始场景的名称
+    public int totalPellets; // 设置关卡中的总球数
+    private int eatenPellets = 0;
+
+    public Text gameTimerText;  // 游戏计时器文本组件的引用
+    private float elapsedTime = 0f; // 流逝的时间
+    private bool isGameStarted = false; // 用于判断游戏是否已经开始
 
     private Vector2 moveDirection = Vector2.zero;
     private Rigidbody2D rb;
@@ -50,12 +61,74 @@ public class PacStudentController : MonoBehaviour
     {
         rb = GetComponent<Rigidbody2D>();
         moveAudio.Stop();
+        gameOverText.gameObject.SetActive(false); // 默认隐藏Game Over文本
+        gameTimerText.text = "00:00:00";
+
     }
 
     void Update()
     {
-        GetInput();
-        PlayAnimationBasedOnDirection();
+        if (isGameStarted && !isGameOver)
+        {
+            elapsedTime += Time.deltaTime;
+            int minutes = (int)elapsedTime / 60;
+            int seconds = (int)elapsedTime % 60;
+            int milliseconds = (int)(elapsedTime * 100) % 100;
+
+            gameTimerText.text = string.Format("{0:00}:{1:00}:{2:00}", minutes, seconds, milliseconds);
+        }
+        if (!isGameOver)
+        {
+            GetInput();
+            PlayAnimationBasedOnDirection();
+            CheckGameOver();
+        }
+    }
+    public void StartGame()
+    {
+        isGameStarted = true;
+    }
+    void CheckGameOver()
+    {
+        if (eatenPellets >= totalPellets)
+        {
+            StartCoroutine(ShowGameOver());
+        }
+    }
+    IEnumerator ShowGameOver()
+    {
+        isGameOver = true;
+        isGameStarted = false;
+        // 停止玩家和游戏计时器
+        moveDirection = Vector2.zero;
+        rb.velocity = Vector2.zero;
+
+        // 如果您有其他音频源或动画，也请停止它们
+        moveAudio.Stop();
+        scaredAudioSource.Stop();
+        countdownText.gameObject.SetActive(false);
+
+        gameOverText.gameObject.SetActive(true);
+
+        int currentScore = score;
+
+        int highScore = PlayerPrefs.GetInt("HighScore", 0);
+        float bestTime = PlayerPrefs.GetFloat("BestTime", float.MaxValue);
+
+        if (currentScore > highScore)
+        {
+            PlayerPrefs.SetInt("HighScore", currentScore);
+            PlayerPrefs.SetFloat("BestTime", elapsedTime);
+        }
+        else if (currentScore == highScore && elapsedTime < bestTime)
+        {
+            PlayerPrefs.SetFloat("BestTime", elapsedTime);
+        }
+
+
+
+        yield return new WaitForSeconds(3);
+        UnityEngine.SceneManagement.SceneManager.LoadScene(startSceneName);
     }
 
     void GetInput()
@@ -78,7 +151,7 @@ public class PacStudentController : MonoBehaviour
         {
             moveAudio.Play();
         }
-        
+
         else if (moveDirection == Vector2.zero)
         {
             moveAudio.Stop();
@@ -121,7 +194,7 @@ public class PacStudentController : MonoBehaviour
     IEnumerator TeleportCooldown(Transform teleportToPosition)
     {
         isTeleporting = true;
-        Vector3 offset = moveDirection * 0.2f; 
+        Vector3 offset = moveDirection * 0.2f;
         transform.position = teleportToPosition.position + offset;
         yield return new WaitForSeconds(0.1f);
         isTeleporting = false;
@@ -131,46 +204,40 @@ public class PacStudentController : MonoBehaviour
     {
         if (other.CompareTag("Diamond"))
         {
-            score += 10;  // 增加分数
-            UpdateScoreUI();  // 更新UI文本
+            eatenPellets++;
+            score += 10;
+            UpdateScoreUI();
 
-            // 暂停移动声音
             moveAudio.Stop();
 
-            // 播放钻石声音
             moveAudio.PlayOneShot(diamondSound);
 
-            // 立即开始播放移动声音
             StartCoroutine(PlayMoveAudioAfterDelay(diamondSound.length));
 
             Destroy(other.gameObject);
         }
         if (other.CompareTag("bounscherry"))
         {
-            score += 100;  // 增加分数
-            UpdateScoreUI();  // 更新UI文本
-            Destroy(other.gameObject);  // 销毁钻石
+            score += 100;
+            UpdateScoreUI();
+            Destroy(other.gameObject);
         }
         if (other.CompareTag("powerpellet"))
         {
-            score += 100;  // 增加分数
-            UpdateScoreUI();  // 更新UI文本
+            score += 100;
+            UpdateScoreUI();
 
-            // 停止所有音乐
+
             AudioSource[] allAudioSources = FindObjectsOfType<AudioSource>();
             foreach (AudioSource audio in allAudioSources)
             {
                 audio.Stop();
             }
 
-            // 播放 scaredSound
-            
             scaredAudioSource.Play();
 
-            // 启动倒计时
             StartCoroutine(ScaredCountdown());
 
-            // 触发所有Ghost的 scared 动画
             GameObject[] ghosts = GameObject.FindGameObjectsWithTag("GhostTag");
             foreach (GameObject ghost in ghosts)
             {
@@ -181,7 +248,7 @@ public class PacStudentController : MonoBehaviour
                 }
             }
 
-            Destroy(other.gameObject);  // 销毁 powerpellet
+            Destroy(other.gameObject);
         }
 
     }
@@ -191,15 +258,15 @@ public class PacStudentController : MonoBehaviour
     {
         float timer = scaredTime;
 
-        countdownText.gameObject.SetActive(true);  // 激活countdownText
+        countdownText.gameObject.SetActive(true);
 
         while (timer > 0)
         {
-            countdownText.text = Mathf.Ceil(timer).ToString(); // 更新Canvas上的倒数计时
+            countdownText.text = Mathf.Ceil(timer).ToString();
 
             if (timer <= 3 && !isRecovering)
             {
-                isRecovering = true; // 避免多次调用
+                isRecovering = true;
                 GameObject[] ghosts = GameObject.FindGameObjectsWithTag("GhostTag");
                 foreach (GameObject ghost in ghosts)
                 {
@@ -215,8 +282,8 @@ public class PacStudentController : MonoBehaviour
             timer -= 1;
         }
 
-        countdownText.text = ""; // 清除Canvas上的倒数计时
-        countdownText.gameObject.SetActive(false);  // 禁用countdownText
+        countdownText.text = "";
+        countdownText.gameObject.SetActive(false);
         scaredAudioSource.Stop();
 
         GameObject[] allGhosts = GameObject.FindGameObjectsWithTag("GhostTag");
@@ -229,7 +296,7 @@ public class PacStudentController : MonoBehaviour
             }
         }
         isScared = false;
-        isRecovering = false; // 重置
+        isRecovering = false;
     }
 
 
