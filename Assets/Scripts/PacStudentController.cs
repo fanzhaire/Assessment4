@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using Unity.VisualScripting;
 
 public class PacStudentController : MonoBehaviour
 {
@@ -24,7 +25,7 @@ public class PacStudentController : MonoBehaviour
 
 
     public Text countdownText;
-    private float scaredTime = 10f;
+    public float scaredTime = 10f;
     private bool isScared = false;
     private bool isRecovering = false;
 
@@ -37,6 +38,14 @@ public class PacStudentController : MonoBehaviour
     public Text gameTimerText;  // 游戏计时器文本组件的引用
     private float elapsedTime = 0f; // 流逝的时间
     private bool isGameStarted = false; // 用于判断游戏是否已经开始
+    
+    public bool hasGivenScore = false;
+
+    public Transform respawnPosition; // 为pacstudent设置一个重生位置
+
+    public int ghostLives = 3;
+
+    public GameObject[] lifeIndicators;
 
     private Vector2 moveDirection = Vector2.zero;
     private Rigidbody2D rb;
@@ -189,6 +198,8 @@ public class PacStudentController : MonoBehaviour
         {
             StartCoroutine(TeleportCooldown(leftTeleporterPosition));
         }
+
+
     }
 
     IEnumerator TeleportCooldown(Transform teleportToPosition)
@@ -202,6 +213,7 @@ public class PacStudentController : MonoBehaviour
 
     private void OnTriggerEnter2D(Collider2D other)
     {
+
         if (other.CompareTag("Diamond"))
         {
             eatenPellets++;
@@ -224,10 +236,10 @@ public class PacStudentController : MonoBehaviour
         }
         if (other.CompareTag("powerpellet"))
         {
+            isScared = true;
             score += 100;
             UpdateScoreUI();
-
-
+            
             AudioSource[] allAudioSources = FindObjectsOfType<AudioSource>();
             foreach (AudioSource audio in allAudioSources)
             {
@@ -244,13 +256,85 @@ public class PacStudentController : MonoBehaviour
                 Animator ghostAnimator = ghost.GetComponent<Animator>();
                 if (ghostAnimator != null)
                 {
-                    ghostAnimator.SetTrigger("scared");
+                    ghostAnimator.SetTrigger("scared"); 
                 }
             }
 
             Destroy(other.gameObject);
         }
 
+        if (other.CompareTag("GhostTag") && isScared)
+        {
+            if (!hasGivenScore)
+            {
+                score += 300; 
+                UpdateScoreUI();
+                hasGivenScore = true;
+            }
+            Animator ghostAnimator = other.gameObject.GetComponent<Animator>();
+            if (ghostAnimator != null)
+            {
+                ghostAnimator.SetTrigger("death"); 
+                StartCoroutine(ReviveGhostAfterDeath(ghostAnimator)); 
+            }
+        }
+
+        if (other.CompareTag("GhostTag") && !isScared && ghostLives>0)
+        {
+            DieAndRespawn();
+        }
+
+
+    }
+
+    void DieAndRespawn()
+    {
+        ghostLives--;
+
+        if (ghostLives == 0)
+        {
+            StartCoroutine(ShowGameOver());
+            return;
+        }
+
+
+        UpdateLifeIndicator();
+
+        // 触发死亡动画
+        animator.SetTrigger("death");
+
+        // 重生逻辑
+        transform.position = respawnPosition.position;
+
+        // 重置分数和时间
+        score = 0;
+        UpdateScoreUI();
+        elapsedTime = 0f;
+
+    }
+
+    void UpdateLifeIndicator()
+    {
+        for (int i = 0; i < lifeIndicators.Length; i++)
+        {
+            if (i < ghostLives)
+            {
+                lifeIndicators[i].SetActive(true);
+            }
+            else
+            {
+                lifeIndicators[i].SetActive(false);
+            }
+        }
+    }
+
+    IEnumerator ReviveGhostAfterDeath(Animator ghostAnimator)
+    {
+        yield return new WaitForSeconds(5f); 
+        ghostAnimator.ResetTrigger("death");
+        ghostAnimator.ResetTrigger("scared");
+        ghostAnimator.SetTrigger("back");
+        hasGivenScore = false;
     }
 
 
@@ -259,15 +343,15 @@ public class PacStudentController : MonoBehaviour
         float timer = scaredTime;
 
         countdownText.gameObject.SetActive(true);
-
+        GameObject[] ghosts = GameObject.FindGameObjectsWithTag("GhostTag");
         while (timer > 0)
         {
             countdownText.text = Mathf.Ceil(timer).ToString();
-
+            
             if (timer <= 3 && !isRecovering)
             {
                 isRecovering = true;
-                GameObject[] ghosts = GameObject.FindGameObjectsWithTag("GhostTag");
+                
                 foreach (GameObject ghost in ghosts)
                 {
                     Animator ghostAnimator = ghost.GetComponent<Animator>();
@@ -277,7 +361,17 @@ public class PacStudentController : MonoBehaviour
                     }
                 }
             }
-
+            else
+            {
+                foreach (GameObject ghost in ghosts)
+                {
+                    Animator ghostAnimator = ghost.GetComponent<Animator>();
+                    if (ghostAnimator != null)
+                    {
+                        ghostAnimator.ResetTrigger("recover");
+                    }
+                }
+            }
             yield return new WaitForSeconds(1);
             timer -= 1;
         }
